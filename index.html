@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Bergwelt – Tiere finden in VR</title>
+<link rel="stylesheet" href="css/stil.css">
+<script type="importmap">
+{ "imports": { "three": "./lib/three.module.js" } }
+</script>
+</head>
+<body>
+<canvas id="bild"></canvas>
+
+<div id="ladetext">Die Bergwelt wird gebaut …</div>
+
+<!-- Startfenster -->
+<div id="start">
+  <div class="kasten">
+    <h1>Tiere der Bergwelt</h1>
+    <p class="auftrag">
+      Du stehst in einem Bergtal. <strong>8 Tierarten</strong> leben hier versteckt.
+      Finde sie alle!
+    </p>
+    <ul class="regeln">
+      <li><strong>Gehen:</strong> Zeige mit dem Strahl auf den Boden und klicke. Du springst dorthin.</li>
+      <li><strong>Sammeln:</strong> Zeige auf ein Tier und klicke. Dann bekommst du seine Karte.</li>
+      <li><strong>Achtung:</strong> Die Tiere sind scheu. Komm langsam näher, sonst laufen sie weg oder verstecken sich.</li>
+    </ul>
+    <div class="knopfreihe">
+      <button id="losknopf" class="gross" disabled>Die Bergwelt wird gebaut …</button>
+      <button id="vrknopf" class="gross vr" disabled>Mit VR-Brille starten</button>
+    </div>
+    <p class="klein">Am Bildschirm: Maus ziehen = umsehen, Klick = springen, W A S D = laufen.</p>
+  </div>
+</div>
+
+<!-- Kopfzeile -->
+<div id="kopf">
+  <span id="zaehler">0 von 8 Tieren</span>
+  <button id="hilfeknopf" title="Hilfe">?</button>
+</div>
+
+<div id="hilfe">
+  <h2>So geht es</h2>
+  <ul>
+    <li>Auf den Boden zeigen und klicken: du springst dorthin (höchstens 30 m).</li>
+    <li>Auf ein Tier zeigen und klicken: du bekommst seine Karte.</li>
+    <li>Grüner Ring = ein Tier im Visier. Gelber Ring = Platz zum Springen. Roter Ring = da geht es nicht.</li>
+    <li>Die Tiere hören und sehen dich. Bleib stehen und warte, dann beruhigen sie sich wieder.</li>
+    <li>Ein verstecktes Tier kommt nach einer Weile woanders heraus.</li>
+  </ul>
+</div>
+
+<!-- Kartenregal -->
+<div id="regal"></div>
+
+<!-- große Karte -->
+<div id="kartenfeld">
+  <div class="kartenbox">
+    <img id="kartenbild" alt="Tierkarte">
+    <button id="kartenzu">Weiter suchen</button>
+  </div>
+</div>
+
+<div id="jubel"></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
