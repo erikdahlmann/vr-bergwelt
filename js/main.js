@@ -7,7 +7,7 @@ import {
 import { erzeugeNatur, windZeit } from './natur.js';
 import { sonnenTextur } from './texturen.js';
 import { erzeugeTiere } from './tiere.js';
-import { KartenVerwaltung } from './karten.js';
+import { KartenVerwaltung, ladeBilder } from './karten.js';
 import { Spieler } from './spieler.js';
 import { vrMoeglich, starteVR } from './vr.js';
 
@@ -92,12 +92,15 @@ function tierGeklickt(tier) {
 }
 
 const spieler = new Spieler(renderer, szene, kamera, gelaende, tiere, tierGeklickt);
+spieler.uiZiele = () => (renderer.xr.isPresenting ? karten.uiZiele : []);
 
 /* ---------- Start-Fenster ---------- */
 const start = document.getElementById('start');
 const losKnopf = document.getElementById('losknopf');
-losKnopf.disabled = false;
-losKnopf.textContent = 'Am Bildschirm starten';
+ladeBilder().then(() => {
+  losKnopf.disabled = false;
+  losKnopf.textContent = 'Am Bildschirm starten';
+});
 // ?sofort überspringt das Startfenster (für Bildschirmfotos und zum Vorführen)
 if (new URLSearchParams(location.search).has('sofort')) {
   setTimeout(() => {
@@ -139,9 +142,9 @@ function bild() {
   const sp = spieler.rig.position;
 
   if (!spieler.pause) {
-    for (const tier of tiere) tier.aktualisiere(dt, sp, tiere);
+    for (const tier of tiere) tier.aktualisiere(dt, sp, tiere, t);
   }
-  karten.aktualisiere(dt);
+  karten.aktualisiere(dt, renderer.xr.isPresenting);
 
   // Wellen
   for (let i = 0; i < wasserPos.count; i++) {

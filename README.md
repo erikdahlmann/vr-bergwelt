@@ -32,6 +32,14 @@ Im Browser der Brille den Knopf „Mit VR-Brille starten“ drücken.
 Ein Sprung geht höchstens 30 m weit. Ins Wasser und aus dem Areal geht es nicht
 (roter Ring).
 
+## Tierkarten
+
+Jede Karte zeigt eine gezeichnete Abbildung des Tieres (ChatGPT über Codex,
+Prompts in `_planung/bildprompts.md`, Bilder in `bilder/*.webp`). Die Karte
+bleibt offen, bis man sie wegklickt. Gefundene Tiere liegen unten rechts im
+Regal und lassen sich jederzeit wieder anklicken – am Bildschirm und in der
+Brille.
+
 ## Die 8 Tiere
 
 Alpensteinbock, Gämse, Alpenmurmeltier, Steinadler, Alpendohle, Schneehase,
@@ -85,6 +93,18 @@ keine Bilddateien:
 * Felsen, Geröll, Rinde und Büsche tragen dieselbe Steinkörnung.
 * Unter Bäumen, Felsen und Büschen liegt ein weicher Fleck, damit nichts
   aufgeklebt wirkt.
+* Felsen haben viele Flächen, Schichtbänder und eine Steinkörnung. In einen
+  Felsen hinein kann man nicht springen.
+
+## Bewegung der Tiere
+
+`js/animation.js` rechnet die Bewegungsphasen. Jedes Bein hat ein Knie, der
+Hals ein Gelenk, Schwänze und Ohren eigene Glieder. Je nach Tempo läuft ein
+Tier im Schritt, im Trab oder im Galopp; die Beine sind dabei richtig versetzt
+(Schritt: hinten rechts, vorne rechts, hinten links, vorne links). Dazu kommen
+Atmen, Blinzeln, Ohrenzucken, Schwanzschlagen, Grasen mit Kauen, Aufrichten
+beim Murmeltier, Flachdrücken beim Hasen, Flügelschlag mit Hand- und
+Schultergelenk, Schlängeln der Otter und der Kriechgang des Salamanders.
 
 Am Rechner rund 60 Bilder/s bei etwa 320 000 Dreiecken.
 

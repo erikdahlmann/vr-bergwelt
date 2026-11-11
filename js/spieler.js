@@ -1,10 +1,19 @@
 // Bewegung: zeigen und klicken (Teleport), dazu Maus/Tastatur zum Testen am Rechner.
 import * as THREE from 'three';
 import { hoeheBei, imAreal, SPIELRADIUS, wasserY } from './gelaende.js';
-import { hindernisse } from './natur.js';
+import { hindernisse, brocken } from './natur.js';
 
 const AUGENHOEHE = 1.35;      // Grundschulkind
 const SPRUNG_MAX = 30;        // Meter pro Teleport
+
+/* Steht dieser Punkt in einem Felsbrocken? Dann würde man im Stein stehen. */
+function imFels(x, z) {
+  for (const b of brocken) {
+    const dx = x - b.x, dz = z - b.z;
+    if (dx * dx + dz * dz < b.r * b.r) return true;
+  }
+  return false;
+}
 
 export class Spieler {
   constructor(renderer, szene, kamera, gelaende, tiere, beiTierKlick) {
@@ -172,7 +181,26 @@ export class Spieler {
       this.strahler.setFromCamera(this.maus, this.kamera);
     }
 
-    // zuerst Tiere
+    // zuerst die Bedienteile in VR (Karte, Regal)
+    this.zielUi = null;
+    const uiZiele = (this.uiZiele && this.uiZiele()) || [];
+    if (uiZiele.length) {
+      const uiTreffer = this.strahler.intersectObjects(uiZiele.filter(o => o.visible && o.parent && o.parent.visible), false);
+      if (uiTreffer.length) {
+        this.zielUi = uiTreffer[0].object;
+        this.zielTier = null;
+        this.zielGueltig = false;
+        this.marker.visible = false;
+        this.tierRing.visible = false;
+        if (inVR && this.aktiverController) {
+          const linie = this.aktiverController.getObjectByName('strahl');
+          if (linie) linie.scale.z = uiTreffer[0].distance;
+        }
+        return;
+      }
+    }
+
+    // dann Tiere
     const trefferflaechen = this.tiere.filter(t => t.sichtbar).map(t => t.treffer);
     const tierTreffer = this.strahler.intersectObjects(trefferflaechen, false);
     const bodenTreffer = this.strahler.intersectObject(this.gelaende, false);
@@ -211,7 +239,7 @@ export class Spieler {
           p.y = hoeheBei(p.x, p.z);
         }
         const nassIm = p.y < wasserY(p.z) - 0.1;
-        this.zielGueltig = imAreal(p.x, p.z) && !nassIm;
+        this.zielGueltig = imAreal(p.x, p.z) && !nassIm && !imFels(p.x, p.z);
         this.zielPunkt.copy(p);
         this.marker.visible = true;
         this.marker.position.copy(p);
@@ -233,6 +261,7 @@ export class Spieler {
 
   klick() {
     if (this.pause) return;
+    if (this.zielUi && this.zielUi.userData.klick) { this.zielUi.userData.klick(); return; }
     if (this.zielTier) { this.beiTierKlick(this.zielTier); return; }
     if (this.zielGueltig) this.teleport(this.zielPunkt);
   }

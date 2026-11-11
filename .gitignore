@@ -1,4 +1,5 @@
 .DS_Store
 .claude/
-test-tiere.html
-test-karten.html
+_planung/
+test-*.html
+bilder/*.png

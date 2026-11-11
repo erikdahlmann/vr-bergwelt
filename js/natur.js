@@ -29,6 +29,7 @@ function zufallGeber(saat) {
 
 export const versteckplaetze = [];   // {pos, art:'fels'|'busch'|'loch'|'spalte', radius}
 export const hindernisse = [];       // Netze, die die Sicht versperren
+export const brocken = [];           // große Felsen: {pos, radius} – da darf niemand hineinspringen
 const schattenFlecken = [];          // weiche Flecken unter Bäumen und Felsen
 
 // Steinkörnung einmal bauen und überall benutzen
@@ -104,22 +105,29 @@ function fichten(gruppe, zuf, menge) {
 
 /* ---------- Felsen ---------- */
 function felsGeometrie(variante, zuf) {
-  const g = new THREE.IcosahedronGeometry(1, variante < 2 ? 1 : 2);
+  // Mehr Flächen und mehrere Rauschstufen: Kanten, Bänder, keine Beulenkugel
+  const g = new THREE.IcosahedronGeometry(1, 2);
   const pos = g.attributes.position;
+  const hoch = 0.8 + 0.4 * zuf();
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
-    const f = 0.68 + 0.5 * rauschen(x * 2.1 + variante * 9, z * 2.1 + y * 1.4);
-    pos.setXYZ(i, x * f, y * f * (0.82 + 0.22 * zuf()), z * f);
+    const grob = rauschen(x * 1.3 + variante * 11, z * 1.3 + y * 0.9 + variante * 3);
+    const mittel = rauschen(x * 3.1 + 5, z * 3.1 + y * 2.2);
+    const fein = rauschen(x * 7.3 + 2, z * 7.3 + y * 5.1);
+    // Schichtbänder waagerecht, wie bei geschichtetem Gestein
+    const band = Math.sin(y * 7.5 + grob * 3) * 0.035;
+    const f = 0.72 + 0.42 * grob + 0.16 * mittel + 0.06 * fein + band;
+    pos.setXYZ(i, x * f, y * f * hoch, z * f);
   }
   g.computeVertexNormals();
   return g;
 }
 function felsen(gruppe, zuf, menge) {
   const plaetze = setze([], menge, (x, z, h, n, d) => (d > 3.2 || h > 6) && n < 0.72, zuf);
-  const varianten = 4;
+  const varianten = 5;
   const geos = [];
   for (let v = 0; v < varianten; v++) geos.push(felsGeometrie(v, zuf));
-  const mats = [0x9a958c, 0x857f77, 0xa8a399, 0x746e67].map(c =>
+  const mats = [0x9a958c, 0x857f77, 0xa8a399, 0x746e67, 0x8f8a80].map(c =>
     new THREE.MeshStandardMaterial(Object.assign({
       color: c, roughness: 1, flatShading: true,
       normalScale: new THREE.Vector2(1.1, 1.1)
@@ -140,6 +148,7 @@ function felsen(gruppe, zuf, menge) {
       im.setMatrixAt(i, m.compose(p, q, s));
       const fh = 0.78 + zuf() * 0.42;
       if (gr > 0.9) schattenFlecken.push({ x: pl.x, z: pl.z, h: pl.h, r: gr * 1.1 });
+      if (gr > 0.8) brocken.push({ x: pl.x, z: pl.z, r: gr * 0.95 });
       felsFarbe.setRGB(fh * (0.98 + zuf() * 0.06), fh, fh * (0.94 + zuf() * 0.08));
       im.setColorAt(i, felsFarbe);
       if (gr > 1.6) versteckplaetze.push({
@@ -375,6 +384,7 @@ export function erzeugeNatur(sparsam = false) {
   versteckplaetze.length = 0;
   hindernisse.length = 0;
   schattenFlecken.length = 0;
+  brocken.length = 0;
   fichten(gruppe, zuf, sparsam ? 110 : 170);
   felsen(gruppe, zuf, sparsam ? 170 : 260);
   buesche(gruppe, zuf, sparsam ? 130 : 200);

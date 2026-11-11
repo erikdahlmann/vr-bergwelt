@@ -4,6 +4,7 @@ import { hoeheBei, neigungBei, flussAbstand, imAreal, SPIELRADIUS } from './gela
 import { versteckplaetze } from './natur.js';
 import { TIERARTEN } from './daten.js';
 import { BAUER } from './modelle.js';
+import { belebe } from './animation.js';
 
 const V = new THREE.Vector3();
 const V2 = new THREE.Vector3();
@@ -115,13 +116,21 @@ export class Tier {
     this.zustandZeit = 0;
   }
 
-  aktualisiere(dt, spielerPos, alleTiere) {
+  aktualisiere(dt, spielerPos, alleTiere, zeit = 0) {
+    this.zeit = zeit;
     const a = this.art;
     this.zustandZeit += dt;
     this.phase += dt;
     const abstand = Math.hypot(this.pos.x - spielerPos.x, this.pos.z - spielerPos.z);
     const hoehenAbstand = Math.abs(this.pos.y - spielerPos.y);
     const naehe = Math.hypot(abstand, hoehenAbstand * 0.6);
+
+    // Winkel vom Blick des Tieres zum Kind (für Kopfdrehung)
+    const zuSpieler = Math.atan2(-(spielerPos.z - this.pos.z), spielerPos.x - this.pos.x);
+    let d = zuSpieler - this.blick;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    this.kopfDreh = Math.max(-1.1, Math.min(1.1, -d));
 
     if (this.flieger) { this.adlerLogik(dt, spielerPos, naehe); this.setzeHaltung(dt); return; }
 
@@ -279,9 +288,8 @@ export class Tier {
     this.zustand = scheu ? 'fliehen' : 'kreisen';
   }
 
-  /* ---- Haltung und Beinbewegung ---- */
+  /* ---- Haltung: Lage im Gelände, Rest macht animation.js ---- */
   setzeHaltung(dt) {
-    const m = this.modell;
     this.wurzel.position.lerp(this.pos, Math.min(1, dt * 12));
     this.wurzel.rotation.y = this.blick;
 
@@ -289,69 +297,17 @@ export class Tier {
       // an den Hang anlegen
       const e = 0.7;
       const vor = V.set(Math.cos(this.blick), 0, -Math.sin(this.blick));
+      const quer = V2.set(-vor.z, 0, vor.x);
       const hV = hoeheBei(this.pos.x + vor.x * e, this.pos.z + vor.z * e);
       const hH = hoeheBei(this.pos.x - vor.x * e, this.pos.z - vor.z * e);
+      const hL = hoeheBei(this.pos.x + quer.x * e, this.pos.z + quer.z * e);
+      const hR = hoeheBei(this.pos.x - quer.x * e, this.pos.z - quer.z * e);
       const nick = Math.atan2(hV - hH, 2 * e);
-      this.neige.rotation.z = -nick * 0.85;
+      const roll = Math.atan2(hL - hR, 2 * e);
+      this.neige.rotation.z = dreheSanft(this.neige.rotation.z, -nick * 0.9, dt * 4);
+      this.neige.rotation.x = dreheSanft(this.neige.rotation.x, roll * 0.8, dt * 4);
     }
-
-    const lauf = Math.min(1, this.tempo / Math.max(0.5, this.art.tempoFlucht));
-    const takt = this.phase * (6 + lauf * 16);
-
-    if (m.beine.length === 4) {
-      m.beine.forEach((b, i) => {
-        const vers = (i === 0 || i === 3) ? 0 : Math.PI;
-        b.rotation.x = Math.sin(takt + vers) * 0.5 * Math.max(0.03, lauf);
-      });
-    } else if (m.beine.length === 2) {
-      m.beine.forEach((b, i) => {
-        b.rotation.x = Math.sin(takt + i * Math.PI) * 0.4 * Math.max(0.02, lauf);
-      });
-    }
-
-    // Körperhaltung je Zustand
-    const z = this.zustand;
-    if (m.kannSitzen) {
-      const sitzt = (z === 'wachsam') ? 1 : 0;
-      this.neige.rotation.z += (sitzt * -0.95 - 0) * 0.0;
-      this.modell.gruppe.rotation.z = dreheSanft(this.modell.gruppe.rotation.z, sitzt * -0.9, dt * 3);
-      this.modell.gruppe.position.y = sitzt * 0.12;
-    }
-    if (m.huepft) {
-      const duckt = (z === 'ducken') ? 1 : 0;
-      this.modell.gruppe.scale.y = 1 - duckt * 0.42;
-      this.modell.gruppe.position.y = duckt * -0.05 + (lauf > 0.35 ? Math.max(0, Math.sin(takt * 0.7)) * 0.35 * lauf : 0);
-      if (m.ohren) m.ohren.forEach((o, i) => { o.rotation.x = duckt * 1.2 + Math.sin(this.phase * 2 + i) * 0.08; });
-    }
-    if (m.schlaengelt && m.segmente) {
-      m.segmente.forEach((s, i) => {
-        s.position.z = Math.sin(this.phase * (3 + lauf * 6) - i * 0.7) * 0.055 * (0.4 + lauf);
-      });
-      if (m.zunge) m.zunge.scale.x = 0.4 + Math.abs(Math.sin(this.phase * 3)) * 1.4;
-    }
-    if (m.watschelt) {
-      this.modell.gruppe.rotation.y = Math.sin(this.phase * 2.5) * 0.12 * (0.3 + lauf);
-    }
-    if (m.fluegel.length) {
-      const schlag = this.flieger
-        ? (this.zustand === 'fliehen' ? 2.6 : 0.9)
-        : (lauf > 0.2 ? 9 : 0.6);
-      const amp = this.flieger
-        ? (this.zustand === 'fliehen' ? 0.55 : 0.16)
-        : (lauf > 0.2 ? 0.9 : 0.05);
-      m.fluegel.forEach(f => {
-        f.rotation.x = Math.sin(this.phase * schlag) * amp * f.userData.seite * -1;
-        f.rotation.z = (this.flieger ? 0.08 : 0) * f.userData.seite;
-      });
-    }
-    // Kopf senken beim Grasen
-    if (m.kopf && !this.flieger) {
-      const grast = (z === 'ruhen' && !m.schlaengelt) ? 1 : 0;
-      const ziel = grast ? 0.55 + Math.sin(this.phase * 1.3) * 0.12 : 0;
-      m.kopf.rotation.z = dreheSanft(m.kopf.rotation.z, ziel, dt * 2);
-      m.kopf.position.y = m.kopf.userData.y0 ?? (m.kopf.userData.y0 = m.kopf.position.y);
-      m.kopf.position.y = m.kopf.userData.y0 - grast * (this.art.groesse * 0.35);
-    }
+    belebe(this, dt, this.zeit || 0);
   }
 }
 
