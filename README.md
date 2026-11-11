@@ -91,7 +91,8 @@ Am Rechner rund 60 Bilder/s bei etwa 320 000 Dreiecken.
 Das Gelände entsteht aus einer Formel (`hoeheBei`), nicht aus einer Datei.
 Dieselbe Formel nutzen Tiere und Teleport. Mit `?sparsam` startet die Seite mit
 weniger Pflanzen (für schwache Geräte); auf Quest und Handys passiert das
-automatisch.
+automatisch. Mit `?sofort` überspringt sie das Startfenster (zum Vorführen und
+für Bildschirmfotos).
 
 ## Später
 
