@@ -92,6 +92,57 @@ function fluegel(eltern, federM, spitzeM, pos, seite, innenLang, aussenLang, bre
 
 
 
+
+/* Körper aus Querschnitten (Ringen) längs der Wirbelsäule.
+   ringe: [{x, y, ry, rz, oben:[r,g,b], unten:[r,g,b]}]
+   Ergibt eine echte Silhouette statt einer Kugel, mit dunklerem Rücken. */
+function koerperGeo(ringe, seg = 16) {
+  const pos = [], norm = [], col = [], uv = [], idx = [];
+  const n = ringe.length;
+  for (let i = 0; i < n; i++) {
+    const r = ringe[i];
+    for (let j = 0; j <= seg; j++) {
+      const w = (j / seg) * Math.PI * 2;
+      const c = Math.cos(w), si = Math.sin(w);
+      pos.push(r.x, r.y + r.ry * c, r.rz * si);
+      norm.push(0, c, si);
+      const t = (c + 1) / 2;                       // 1 = oben, 0 = unten
+      const o = r.oben, u = r.unten || r.oben;
+      col.push(u[0] + (o[0] - u[0]) * t, u[1] + (o[1] - u[1]) * t, u[2] + (o[2] - u[2]) * t);
+      uv.push(i / (n - 1), j / seg);
+    }
+  }
+  for (let i = 0; i < n - 1; i++) {
+    for (let j = 0; j < seg; j++) {
+      const a = i * (seg + 1) + j, b = a + seg + 1;
+      idx.push(a, b, a + 1, a + 1, b, b + 1);
+    }
+  }
+  // Deckel vorn und hinten
+  for (const [ri, vorn] of [[0, false], [n - 1, true]]) {
+    const r = ringe[ri];
+    const mitte = pos.length / 3;
+    pos.push(r.x, r.y, 0);
+    norm.push(vorn ? 1 : -1, 0, 0);
+    col.push(...(r.unten || r.oben));
+    uv.push(0.5, 0.5);
+    for (let j = 0; j < seg; j++) {
+      const a = ri * (seg + 1) + j;
+      if (vorn) idx.push(mitte, a, a + 1); else idx.push(mitte, a + 1, a);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(norm, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+const KOERPER_M = (extra = {}) => new THREE.MeshStandardMaterial(
+  Object.assign({ vertexColors: true, roughness: 0.82 }, extra));
+
 /* Mehrere Geometrien zu einer verschmelzen – spart Zeichenaufrufe.
    stuecke: [{geo, pos?, rot?, scale?}] */
 function verschmelze(stuecke) {
@@ -135,20 +186,24 @@ function halsKopf(eltern, mat, basis, lang, dickUnten, dickOben, neigung) {
 /* ---------------- Alpensteinbock ---------------- */
 function steinbock() {
   const g = new THREE.Group();
-  const fell = M(0x8d7556), bauch = M(0xa89477), dunkel = M(0x4b3d2c);
+  const fell = M(0x8d7556), bauch = M(0xa89477), dunkel = M(0x4b3d2c), beinM = M(0x6d5940);
   const horn = M(0x5f5648, { roughness: 0.6 }), huf = M(0x2e2823);
-  const rumpf = teil(g, verschmelze([
-    { geo: new THREE.SphereGeometry(0.3, 16, 12), pos: [-0.02, 0, 0], scale: [2.35, 0.95, 0.82] },
-    { geo: new THREE.SphereGeometry(0.26, 12, 9), pos: [0.34, 0.08, 0], scale: [1.0, 1.05, 0.98] },
-    { geo: new THREE.SphereGeometry(0.25, 12, 9), pos: [-0.42, 0.08, 0], scale: [0.95, 1.0, 0.95] }
-  ]), fell, 0, 0.84, 0);
-  const b = teil(g, new THREE.SphereGeometry(0.27, 12, 9), bauch, -0.04, 0.76, 0);
-  b.scale.set(2.0, 0.76, 0.88);
+  const ro = [0.44, 0.36, 0.25], ru = [0.66, 0.56, 0.4];   // Rücken dunkel, Bauch hell
+  const rumpf = teil(g, koerperGeo([
+    { x: -0.70, y: 0.92, ry: 0.05, rz: 0.045, oben: ro, unten: ru },
+    { x: -0.58, y: 0.90, ry: 0.17, rz: 0.15, oben: ro, unten: ru },
+    { x: -0.42, y: 0.87, ry: 0.25, rz: 0.22, oben: ro, unten: ru },
+    { x: -0.18, y: 0.84, ry: 0.28, rz: 0.25, oben: ro, unten: ru },
+    { x: 0.08, y: 0.83, ry: 0.29, rz: 0.26, oben: ro, unten: ru },
+    { x: 0.30, y: 0.86, ry: 0.28, rz: 0.24, oben: ro, unten: ru },
+    { x: 0.46, y: 0.92, ry: 0.21, rz: 0.18, oben: ro, unten: ru },
+    { x: 0.55, y: 0.97, ry: 0.13, rz: 0.12, oben: ro, unten: ru }
+  ]), KOERPER_M(), 0, 0, 0);
   // Hals und Kopf
-  const hk = halsKopf(g, fell, [0.48, 1.0, 0], 0.5, 0.2, 0.13, 0.85);
+  const hk = halsKopf(g, fell, [0.5, 0.97, 0], 0.46, 0.145, 0.1, 0.8);
   const hals = hk.hals, kopf = hk.kopf;
-  const schaedel = teil(kopf, new THREE.SphereGeometry(0.14, 12, 9), fell, 0.04, 0, 0);
-  schaedel.scale.set(1.7, 1.0, 0.92);
+  const schaedel = teil(kopf, new THREE.SphereGeometry(0.105, 12, 9), fell, 0.05, 0, 0);
+  schaedel.scale.set(1.95, 1.05, 0.95);
   teil(kopf, new THREE.SphereGeometry(0.07, 9, 7), dunkel, 0.26, -0.03, 0).scale.set(1.1, 0.85, 0.9);
   const augen = [auge(kopf, 0.1, 0.05, 0.1, 0.028), auge(kopf, 0.1, 0.05, -0.1, 0.028)];
   const bart = teil(kopf, new THREE.ConeGeometry(0.05, 0.22, 7), dunkel, -0.02, -0.14, 0);
@@ -181,10 +236,10 @@ function steinbock() {
     ohren.push({ dreh: o, seite: s });
   }
   const beine = [
-    bein(g, fell, huf, [0.42, 0.76, 0.15], 0.34, 0.34, 0.078, -1, true, 1),
-    bein(g, fell, huf, [0.42, 0.76, -0.15], 0.34, 0.34, 0.078, -1, true, -1),
-    bein(g, fell, huf, [-0.42, 0.78, 0.16], 0.36, 0.34, 0.086, 1, false, 1),
-    bein(g, fell, huf, [-0.42, 0.78, -0.16], 0.36, 0.34, 0.086, 1, false, -1)
+    bein(g, beinM, huf, [0.42, 0.78, 0.15], 0.35, 0.33, 0.072, -1, true, 1),
+    bein(g, beinM, huf, [0.42, 0.78, -0.15], 0.35, 0.33, 0.072, -1, true, -1),
+    bein(g, beinM, huf, [-0.42, 0.8, 0.16], 0.37, 0.33, 0.08, 1, false, 1),
+    bein(g, beinM, huf, [-0.42, 0.8, -0.16], 0.37, 0.33, 0.08, 1, false, -1)
   ];
   const schwanz = kette(g, dunkel, [-0.62, 0.9, 0], 2, 0.1, 0.05, 0.03);
   schwanz.wurzel.rotation.z = -0.5;
@@ -200,16 +255,21 @@ function gaemse() {
   const g = new THREE.Group();
   const fell = M(0x6b4f33), hell = M(0xd9cdb4), dunkel = M(0x2a2119);
   const horn = M(0x332f2a, { roughness: 0.5 }), huf = M(0x241f1a);
-  const rumpf = teil(g, verschmelze([
-    { geo: new THREE.SphereGeometry(0.25, 16, 12), pos: [-0.02, 0, 0], scale: [2.4, 0.95, 0.78] },
-    { geo: new THREE.SphereGeometry(0.22, 12, 9), pos: [0.3, 0.08, 0], scale: [1.0, 1.05, 0.95] }
-  ]), fell, 0, 0.82, 0);
-  const bauch = teil(g, new THREE.SphereGeometry(0.22, 12, 9), M(0x8a6a44), -0.04, 0.76, 0);
-  bauch.scale.set(2.0, 0.75, 0.84);
-  const hk = halsKopf(g, fell, [0.42, 0.95, 0], 0.46, 0.15, 0.085, 1.0);
+  const ro = [0.28, 0.2, 0.12], ru = [0.5, 0.39, 0.26];
+  const rumpf = teil(g, koerperGeo([
+    { x: -0.62, y: 0.88, ry: 0.045, rz: 0.04, oben: ro, unten: ru },
+    { x: -0.50, y: 0.86, ry: 0.15, rz: 0.13, oben: ro, unten: ru },
+    { x: -0.36, y: 0.84, ry: 0.22, rz: 0.19, oben: ro, unten: ru },
+    { x: -0.12, y: 0.82, ry: 0.24, rz: 0.21, oben: ro, unten: ru },
+    { x: 0.12, y: 0.81, ry: 0.25, rz: 0.22, oben: ro, unten: ru },
+    { x: 0.30, y: 0.84, ry: 0.23, rz: 0.2, oben: ro, unten: ru },
+    { x: 0.42, y: 0.89, ry: 0.17, rz: 0.15, oben: ro, unten: ru },
+    { x: 0.50, y: 0.93, ry: 0.1, rz: 0.09, oben: ro, unten: ru }
+  ]), KOERPER_M(), 0, 0, 0);
+  const hk = halsKopf(g, fell, [0.46, 0.92, 0], 0.42, 0.115, 0.075, 0.95);
   const hals = hk.hals, kopf = hk.kopf;
-  const schaedel = teil(kopf, new THREE.SphereGeometry(0.105, 12, 9), hell, 0.04, 0, 0);
-  schaedel.scale.set(1.8, 1.0, 0.88);
+  const schaedel = teil(kopf, new THREE.SphereGeometry(0.082, 12, 9), hell, 0.045, 0, 0);
+  schaedel.scale.set(2.0, 1.05, 0.95);
   teil(kopf, new THREE.SphereGeometry(0.055, 9, 7), dunkel, 0.22, -0.02, 0).scale.set(1.0, 0.85, 0.9);
   const augen = [auge(kopf, 0.08, 0.05, 0.08, 0.024), auge(kopf, 0.08, 0.05, -0.08, 0.024)];
   for (const s of [1, -1]) {
@@ -245,11 +305,16 @@ function gaemse() {
 function murmeltier() {
   const g = new THREE.Group();
   const fell = M(0x9d7d50), bauch = M(0xc6a87a), dunkel = M(0x4a3922), nase = M(0x33281c);
-  const rumpf = teil(g, new THREE.SphereGeometry(0.2, 14, 11), fell, 0, 0.21, 0);
-  rumpf.scale.set(1.7, 1.05, 1.12);
-  const b = teil(g, new THREE.SphereGeometry(0.17, 11, 9), bauch, 0.04, 0.17, 0);
-  b.scale.set(1.45, 0.78, 0.98);
-  const hk = halsKopf(g, fell, [0.24, 0.24, 0], 0.08, 0.1, 0.09, 0.25);
+  const ro = [0.52, 0.4, 0.23], ru = [0.78, 0.65, 0.45];
+  const rumpf = teil(g, koerperGeo([
+    { x: -0.28, y: 0.26, ry: 0.05, rz: 0.045, oben: ro, unten: ru },
+    { x: -0.2, y: 0.26, ry: 0.12, rz: 0.115, oben: ro, unten: ru },
+    { x: -0.09, y: 0.25, ry: 0.16, rz: 0.155, oben: ro, unten: ru },
+    { x: 0.04, y: 0.25, ry: 0.17, rz: 0.165, oben: ro, unten: ru },
+    { x: 0.15, y: 0.26, ry: 0.155, rz: 0.15, oben: ro, unten: ru },
+    { x: 0.24, y: 0.28, ry: 0.105, rz: 0.1, oben: ro, unten: ru }
+  ]), KOERPER_M(), 0, 0, 0);
+  const hk = halsKopf(g, fell, [0.25, 0.29, 0], 0.07, 0.095, 0.085, 0.2);
   const hals = hk.hals, kopf = hk.kopf;
   const schaedel = teil(kopf, new THREE.SphereGeometry(0.11, 12, 9), fell, 0.02, 0, 0);
   schaedel.scale.set(1.3, 0.98, 1.0);
@@ -265,13 +330,13 @@ function murmeltier() {
     ohren.push({ dreh: o, seite: s });
   }
   const beine = [
-    bein(g, fell, fell, [0.16, 0.19, 0.1], 0.08, 0.08, 0.04, -1, true, 1),
-    bein(g, fell, fell, [0.16, 0.19, -0.1], 0.08, 0.08, 0.04, -1, true, -1),
-    bein(g, fell, fell, [-0.15, 0.2, 0.11], 0.09, 0.09, 0.048, 1, false, 1),
-    bein(g, fell, fell, [-0.15, 0.2, -0.11], 0.09, 0.09, 0.048, 1, false, -1)
+    bein(g, fell, dunkel, [0.15, 0.22, 0.095], 0.1, 0.1, 0.038, -1, true, 1),
+    bein(g, fell, dunkel, [0.15, 0.22, -0.095], 0.1, 0.1, 0.038, -1, true, -1),
+    bein(g, fell, dunkel, [-0.14, 0.23, 0.105], 0.11, 0.11, 0.046, 1, false, 1),
+    bein(g, fell, dunkel, [-0.14, 0.23, -0.105], 0.11, 0.11, 0.046, 1, false, -1)
   ];
-  const schwanz = kette(g, dunkel, [-0.3, 0.22, 0], 3, 0.09, 0.045, 0.02);
-  schwanz.wurzel.rotation.z = -0.35;
+  const schwanz = kette(g, dunkel, [-0.28, 0.26, 0], 3, 0.065, 0.05, 0.028);
+  schwanz.wurzel.rotation.z = 0.45;
   return {
     gruppe: g, typ: 'vierbeiner', beine, hals, kopf, augen, ohren, schwanz,
     rumpf, widerrist: 0.3, hitRadius: 0.55, hitHoehe: 0.3, kannSitzen: true,
@@ -285,10 +350,14 @@ function steinadler() {
   const feder = M(0x4b3a29, { side: THREE.DoubleSide });
   const spitzen = M(0x2b2219, { side: THREE.DoubleSide });
   const nacken = M(0x96794f), schnabelM = M(0xd9ae38), klaue = M(0xe0b94a);
-  const rumpf = teil(g, new THREE.SphereGeometry(0.15, 14, 11), feder, 0, 0, 0);
-  rumpf.scale.set(2.3, 1.0, 0.95);
-  const brust = teil(g, new THREE.SphereGeometry(0.13, 11, 9), nacken, 0.17, -0.01, 0);
-  brust.scale.set(1.0, 0.95, 0.95);
+  const ro = [0.26, 0.2, 0.14], ru = [0.42, 0.33, 0.22];
+  const rumpf = teil(g, koerperGeo([
+    { x: -0.3, y: 0.01, ry: 0.04, rz: 0.035, oben: ro, unten: ru },
+    { x: -0.18, y: 0.01, ry: 0.1, rz: 0.09, oben: ro, unten: ru },
+    { x: -0.02, y: 0, ry: 0.15, rz: 0.13, oben: ro, unten: ru },
+    { x: 0.14, y: 0.01, ry: 0.15, rz: 0.13, oben: ro, unten: [0.55, 0.45, 0.28] },
+    { x: 0.26, y: 0.03, ry: 0.1, rz: 0.09, oben: [0.56, 0.46, 0.3], unten: [0.6, 0.5, 0.33] }
+  ]), KOERPER_M(), 0, 0, 0);
   const hk = halsKopf(g, nacken, [0.28, 0.03, 0], 0.07, 0.085, 0.075, 0.15);
   const hals = hk.hals, kopf = hk.kopf;
   const schaedel = teil(kopf, new THREE.SphereGeometry(0.085, 11, 9), nacken, 0, 0, 0);
@@ -323,8 +392,14 @@ function alpendohle() {
   const feder = M(0x2c2c31, { side: THREE.DoubleSide });
   const glanz = M(0x3b3b44, { side: THREE.DoubleSide, roughness: 0.55 });
   const schnabelM = M(0xe3c53c), fussM = M(0xb04a3c);
-  const rumpf = teil(g, new THREE.SphereGeometry(0.082, 12, 9), feder, 0, 0.14, 0);
-  rumpf.scale.set(2.0, 1.05, 1.0);
+  const ro = [0.14, 0.14, 0.16], ru = [0.24, 0.24, 0.27];
+  const rumpf = teil(g, koerperGeo([
+    { x: -0.15, y: 0.14, ry: 0.025, rz: 0.022, oben: ro, unten: ru },
+    { x: -0.08, y: 0.14, ry: 0.06, rz: 0.055, oben: ro, unten: ru },
+    { x: 0.0, y: 0.14, ry: 0.085, rz: 0.075, oben: ro, unten: ru },
+    { x: 0.08, y: 0.15, ry: 0.078, rz: 0.07, oben: ro, unten: ru },
+    { x: 0.13, y: 0.17, ry: 0.05, rz: 0.045, oben: ro, unten: ru }
+  ]), KOERPER_M(), 0, 0, 0);
   const hk = halsKopf(g, feder, [0.12, 0.17, 0], 0.05, 0.05, 0.045, 0.45);
   const hals = hk.hals, kopf = hk.kopf;
   teil(kopf, new THREE.SphereGeometry(0.055, 10, 8), feder).scale.set(1.15, 1, 0.98);
@@ -355,11 +430,17 @@ function alpendohle() {
 function schneehase() {
   const g = new THREE.Group();
   const fell = M(0x9c9185), hell = M(0xe8e4dc), dunkel = M(0x3a342d), nase = M(0xa8807c);
-  const rumpf = teil(g, new THREE.SphereGeometry(0.145, 14, 11), fell, 0, 0.21, 0);
-  rumpf.scale.set(1.95, 0.95, 0.84);
-  const b = teil(g, new THREE.SphereGeometry(0.12, 11, 9), hell, 0.02, 0.17, 0);
-  b.scale.set(1.5, 0.7, 0.92);
-  const hk = halsKopf(g, fell, [0.18, 0.25, 0], 0.07, 0.08, 0.07, 0.45);
+  const ro = [0.48, 0.44, 0.39], ru = [0.78, 0.74, 0.68];
+  const rumpf = teil(g, koerperGeo([
+    { x: -0.25, y: 0.26, ry: 0.045, rz: 0.04, oben: ro, unten: ru },
+    { x: -0.19, y: 0.26, ry: 0.11, rz: 0.095, oben: ro, unten: ru },
+    { x: -0.11, y: 0.25, ry: 0.14, rz: 0.12, oben: ro, unten: ru },
+    { x: -0.02, y: 0.24, ry: 0.145, rz: 0.125, oben: ro, unten: ru },
+    { x: 0.07, y: 0.24, ry: 0.135, rz: 0.115, oben: ro, unten: ru },
+    { x: 0.14, y: 0.25, ry: 0.11, rz: 0.095, oben: ro, unten: ru },
+    { x: 0.19, y: 0.27, ry: 0.07, rz: 0.06, oben: ro, unten: ru }
+  ]), KOERPER_M(), 0, 0, 0);
+  const hk = halsKopf(g, fell, [0.19, 0.28, 0], 0.06, 0.075, 0.065, 0.4);
   const hals = hk.hals, kopf = hk.kopf;
   const schaedel = teil(kopf, new THREE.SphereGeometry(0.082, 12, 9), fell, 0.02, 0, 0);
   schaedel.scale.set(1.45, 1.0, 0.92);
@@ -378,12 +459,12 @@ function schneehase() {
     ohren.push({ dreh: o, seite: s, ruhe: new THREE.Euler(s * 0.28, 0, 0.34) });
   }
   const beine = [
-    bein(g, fell, fell, [0.14, 0.17, 0.08], 0.07, 0.07, 0.028, -1, true, 1),
-    bein(g, fell, fell, [0.14, 0.17, -0.08], 0.07, 0.07, 0.028, -1, true, -1),
-    bein(g, fell, fell, [-0.11, 0.21, 0.095], 0.12, 0.11, 0.045, 1, false, 1),
-    bein(g, fell, fell, [-0.11, 0.21, -0.095], 0.12, 0.11, 0.045, 1, false, -1)
+    bein(g, fell, dunkel, [0.12, 0.2, 0.075], 0.09, 0.09, 0.026, -1, true, 1),
+    bein(g, fell, dunkel, [0.12, 0.2, -0.075], 0.09, 0.09, 0.026, -1, true, -1),
+    bein(g, fell, dunkel, [-0.11, 0.23, 0.09], 0.13, 0.11, 0.042, 1, false, 1),
+    bein(g, fell, dunkel, [-0.11, 0.23, -0.09], 0.13, 0.11, 0.042, 1, false, -1)
   ];
-  const schwanz = kette(g, hell, [-0.24, 0.22, 0], 1, 0.07, 0.05, 0.04);
+  const schwanz = kette(g, hell, [-0.25, 0.26, 0], 1, 0.05, 0.04, 0.03);
   return {
     gruppe: g, typ: 'vierbeiner', beine, hals, kopf, augen, ohren, schwanz,
     rumpf, widerrist: 0.3, hitRadius: 0.45, hitHoehe: 0.25, huepft: true,
