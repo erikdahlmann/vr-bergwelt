@@ -345,3 +345,24 @@ export function rindeTextur(groesse = 256) {
   g.putImageData(bild, 0, 0);
   return lw;
 }
+
+/* ---------- Großflächige Flecken gegen das Kachelmuster ---------- */
+export function makroTextur(groesse = 256) {
+  const lw = leinwand(groesse, groesse);
+  const g = lw.getContext('2d');
+  const bild = g.createImageData(groesse, groesse);
+  for (let y = 0; y < groesse; y++) {
+    for (let x = 0; x < groesse; x++) {
+      const u = x / groesse * Math.PI * 2, v = y / groesse * Math.PI * 2;
+      // weiches Rauschen auf dem Ring, damit die Kacheln passen
+      const n1 = fbm(Math.cos(u) * 2.2 + 17, Math.sin(u) * 2.2 + Math.cos(v) * 2.2, 3);
+      const n2 = fbm(Math.sin(v) * 4.5 + 5, Math.cos(u) * 4.5 + 31, 2);
+      const w = Math.max(0, Math.min(255, 128 + (n1 - 0.5) * 210 + (n2 - 0.5) * 90));
+      const i = (y * groesse + x) * 4;
+      bild.data[i] = w; bild.data[i + 1] = w * 1.02; bild.data[i + 2] = w * 0.94;
+      bild.data[i + 3] = 255;
+    }
+  }
+  g.putImageData(bild, 0, 0);
+  return lw;
+}

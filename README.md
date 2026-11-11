@@ -105,6 +105,12 @@ keine Bilddateien:
   Boden mischt Wiese, Fels, Kies und Schnee im Shader; wie viel wovon, steht
   als Wert an jedem Geländepunkt.
 * Ins Wasser darf man. Im Fluss watet man bis zur Hüfte, der Kopf bleibt oben.
+* Gegen das Kachelmuster: Der Shader mischt jede Textur aus zwei Maßstäben
+  (der zweite gedreht und versetzt) und legt großflächige, weiche Flecken
+  darüber. Wichtig: Fels und Kies brauchen eine **feinere** zweite Stufe –
+  eine gröbere zieht das Zellmuster zu Mosaikplatten auf. Das Geländenetz
+  löst nur etwa 0,9 m auf; feineres Höhenrauschen würde als Facetten
+  auffallen und macht deshalb die Normalenkarte.
 
 ## Bewegung der Tiere
 

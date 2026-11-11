@@ -1,7 +1,7 @@
 // Gelände, Himmel, Fluss und Fernberge für das Bergszenario.
 import * as THREE from 'three';
 import { kornTextur, normalAus, wasserNormal, himmelTextur, textur,
-         wieseTextur, felsTextur, kiesTextur } from './texturen.js';
+         wieseTextur, felsTextur, kiesTextur, makroTextur } from './texturen.js';
 
 export const AREAL = 200;            // Kantenlänge in Metern
 export const SPIELRADIUS = 94;       // begehbarer Radius
@@ -43,9 +43,10 @@ export function hoeheBei(x, z) {
   let h = huegel + rand;
   // Felsstruktur: oben und an den Wänden rau
   const rau = Math.max(glatt(5, 17, huegel + rand * 0.7), glatt(42, 92, r));
-  h += (fbm(x * 0.19 + 77, z * 0.19 + 13, 2) - 0.5) * (0.5 + 3.4 * rau);
-  h += (fbm(x * 0.52 + 5, z * 0.52 + 41, 2) - 0.5) * (0.22 + 1.5 * rau);
-  h += (fbm(x * 1.3 + 17, z * 1.3 + 3, 1) - 0.5) * 0.12;
+  // Nur Wellen, die das Netz auch auflösen kann (ein Dreieck ist etwa 0,9 m breit).
+  // Feineres Rauschen würde als Facettenmuster auffallen; das macht die Normalenkarte.
+  h += (fbm(x * 0.13 + 77, z * 0.13 + 13, 2) - 0.5) * (0.6 + 4.2 * rau);
+  h += (fbm(x * 0.3 + 5, z * 0.3 + 41, 2) - 0.5) * (0.18 + 1.1 * rau);
   // Flussrinne einschneiden
   const d = flussAbstand(x, z);
   const rinne = 1 - glatt(4.5, 16, d);
@@ -121,33 +122,49 @@ export function erzeugeGelaende() {
   const fels = textur(felsTextur(512), 95, true);
   const kies = textur(kiesTextur(512), 95, true);
   const felsHoehe = felsTextur(256);
+  const makro = textur(makroTextur(256), 1);
   const mat = new THREE.MeshStandardMaterial({
     vertexColors: true, roughness: 0.96, metalness: 0,
     map: wiese,
-    normalMap: textur(normalAus(felsHoehe, 2.2), 95),
+    normalMap: textur(normalAus(felsHoehe, 2.2), 150),
     normalScale: new THREE.Vector2(0.6, 0.6)
   });
   // Gras, Fels, Kies und Schnee werden im Shader gemischt
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uFels = { value: fels };
     sh.uniforms.uKies = { value: kies };
+    sh.uniforms.uMakro = { value: makro };
     sh.vertexShader = `attribute float aFels; attribute float aKies; attribute float aSchnee;
 varying float vFels; varying float vKies; varying float vSchnee;
 ` + sh.vertexShader.replace('#include <begin_vertex>',
       `#include <begin_vertex>
        vFels = aFels; vKies = aKies; vSchnee = aSchnee;`);
-    sh.fragmentShader = `uniform sampler2D uFels; uniform sampler2D uKies;
+    sh.fragmentShader = `uniform sampler2D uFels; uniform sampler2D uKies; uniform sampler2D uMakro;
 varying float vFels; varying float vKies; varying float vSchnee;
+// zweiter, gedrehter Maßstab – so fällt die Kachel nicht mehr auf
+vec3 zweiStufen(sampler2D karte, vec2 uv, float grob) {
+  vec2 uv2 = mat2(0.62, -0.78, 0.78, 0.62) * uv * grob + vec2(0.31, 0.57);
+  vec3 a = texture2D(karte, uv).rgb;
+  vec3 b = texture2D(karte, uv2).rgb;
+  return a * 0.58 + b * 0.42;
+}
 ` + sh.fragmentShader.replace('#include <map_fragment>',
-      `vec4 tGras = texture2D(map, vMapUv);
-       vec4 tFels = texture2D(uFels, vMapUv * 0.78);
-       vec4 tKies = texture2D(uKies, vMapUv * 1.15);
-       vec3 misch = mix(tGras.rgb, tFels.rgb, clamp(vFels, 0.0, 1.0));
-       misch = mix(misch, tKies.rgb, clamp(vKies, 0.0, 1.0));
+      `vec3 tGras = zweiStufen(map, vMapUv, 0.31);
+       // Fels und Kies bekommen eine FEINERE zweite Stufe; eine gröbere
+       // würde das Zellmuster riesig aufziehen.
+       vec3 tFels = zweiStufen(uFels, vMapUv * 2.45, 2.7) * 0.9;
+       vec3 tKies = zweiStufen(uKies, vMapUv * 2.1, 2.3);
+       vec3 misch = mix(tGras, tFels, clamp(vFels, 0.0, 1.0));
+       misch = mix(misch, tKies, clamp(vKies, 0.0, 1.0));
        misch = mix(misch, vec3(0.9, 0.93, 1.0) * (0.72 + 0.45 * tFels.r), clamp(vSchnee, 0.0, 1.0));
+       // große, weiche Flecken über alles: hell/dunkel und etwas Farbe
+       float makroA = texture2D(uMakro, vMapUv * 0.022).r;
+       float makroB = texture2D(uMakro, vMapUv * 0.085 + vec2(0.4, 0.13)).r;
+       float makro = makroA * 0.65 + makroB * 0.35;
+       misch *= vec3(0.80 + makro * 0.46, 0.82 + makro * 0.40, 0.78 + makro * 0.44);
        diffuseColor *= vec4(misch, 1.0);`);
   };
-  mat.customProgramCacheKey = () => 'boden4';
+  mat.customProgramCacheKey = () => 'boden9';
   const netz = new THREE.Mesh(geo, mat);
   netz.receiveShadow = true;
   netz.name = 'gelaende';
