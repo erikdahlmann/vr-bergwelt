@@ -1,7 +1,8 @@
 // Bäume, Felsen, Büsche, Gras, Blumen, Baumstämme – und die Versteckplätze.
 import * as THREE from 'three';
 import { hoeheBei, neigungBei, flussAbstand, rauschen, fbm, SPIELRADIUS } from './gelaende.js';
-import { grasTextur, kornTextur, normalAus, fleckTextur, textur } from './texturen.js';
+import { grasTextur, kornTextur, normalAus, fleckTextur, textur,
+         felsTextur, rindeTextur, wieseTextur } from './texturen.js';
 
 // Wind: eine Zahl, die die Hauptschleife hochzählt
 export const windZeit = { value: 0 };
@@ -30,18 +31,43 @@ function zufallGeber(saat) {
 export const versteckplaetze = [];   // {pos, art:'fels'|'busch'|'loch'|'spalte', radius}
 export const hindernisse = [];       // Netze, die die Sicht versperren
 export const brocken = [];           // große Felsen: {pos, radius} – da darf niemand hineinspringen
+export const sperren = [];           // Kreise, durch die kein Tier läuft: Felsen und Stämme
 const schattenFlecken = [];          // weiche Flecken unter Bäumen und Felsen
 
-// Steinkörnung einmal bauen und überall benutzen
+// Steintextur einmal bauen und überall benutzen
 let steinKarten = null;
 function stein(wiederholung) {
   if (!steinKarten) {
-    const k = kornTextur(256);
-    steinKarten = { farbe: k.farbe, normal: normalAus(k.hoehe, 2.6) };
+    const lw = felsTextur(512);
+    steinKarten = { farbe: lw, normal: normalAus(felsTextur(256), 2.4) };
   }
-  const f = textur(steinKarten.farbe, wiederholung);
-  f.colorSpace = THREE.NoColorSpace;
+  const f = textur(steinKarten.farbe, wiederholung, true);
   return { map: f, normalMap: textur(steinKarten.normal, wiederholung) };
+}
+// Blatt- und Nadelstruktur (dieselbe Zeichnung wie die Wiese, nur dicht gekachelt)
+let laubKarten = null;
+function laub(wiederholung) {
+  if (!laubKarten) {
+    const lw = wieseTextur(512);
+    laubKarten = { farbe: lw, normal: normalAus(lw, 1.6) };
+  }
+  return {
+    map: textur(laubKarten.farbe, wiederholung, true),
+    normalMap: textur(laubKarten.normal, wiederholung)
+  };
+}
+// Rinde für die Stämme
+let rindeKarten = null;
+function rinde(wiederholung) {
+  if (!rindeKarten) {
+    const lw = rindeTextur(256);
+    rindeKarten = { farbe: lw, normal: normalAus(lw, 2.0) };
+  }
+  const f = textur(rindeKarten.farbe, wiederholung, true);
+  f.repeat.set(2, 1);
+  const n = textur(rindeKarten.normal, wiederholung);
+  n.repeat.set(2, 1);
+  return { map: f, normalMap: n };
 }
 
 function setze(ziel, anzahl, pruef, zuf) {
@@ -71,10 +97,13 @@ function fichten(gruppe, zuf, menge) {
     kroneG.push(g);
   }
   const stammM = new THREE.MeshStandardMaterial(Object.assign({
-    color: 0x6a5540, roughness: 0.95
-  }, stein(1.2)));
-  const nadelM = [0x44663a, 0x4d7140, 0x3a5c35].map(c =>
-    windMachen(new THREE.MeshStandardMaterial({ color: c, roughness: 0.9, flatShading: true }), 0.022, 0.9));
+    color: 0xa08868, roughness: 0.95, normalScale: new THREE.Vector2(1.3, 1.3)
+  }, rinde(1)));
+  const nadelM = [0x9fd185, 0xb0dd92, 0x8cc077].map(c =>
+    windMachen(new THREE.MeshStandardMaterial(Object.assign({
+      color: c, roughness: 0.9, flatShading: true,
+      normalScale: new THREE.Vector2(0.8, 0.8)
+    }, laub(3))), 0.022, 0.9));
   const stamm = new THREE.InstancedMesh(stammG, stammM, anz);
   const kronen = kroneG.map((g, i) => new THREE.InstancedMesh(g, nadelM[i], anz));
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
@@ -87,6 +116,7 @@ function fichten(gruppe, zuf, menge) {
     stamm.setMatrixAt(i, m.compose(p, q, s));
     const stufen = [[0.30, 1.00, 0.42], [0.58, 0.78, 0.34], [0.80, 0.52, 0.26]];
     schattenFlecken.push({ x: pl.x, z: pl.z, h: pl.h, r: breit * 1.9 });
+    sperren.push({ x: pl.x, z: pl.z, r: 0.3 + breit * 0.22 });
     stufen.forEach((st, k) => {
       p.set(pl.x, pl.h + hoch * st[0], pl.z);
       s.set(breit * st[1] * 1.5, hoch * st[2] * 1.5, breit * st[1] * 1.5);
@@ -149,6 +179,7 @@ function felsen(gruppe, zuf, menge) {
       const fh = 0.78 + zuf() * 0.42;
       if (gr > 0.9) schattenFlecken.push({ x: pl.x, z: pl.z, h: pl.h, r: gr * 1.1 });
       if (gr > 0.8) brocken.push({ x: pl.x, z: pl.z, r: gr * 0.95 });
+      if (gr > 0.55) sperren.push({ x: pl.x, z: pl.z, r: gr * 0.8 });
       felsFarbe.setRGB(fh * (0.98 + zuf() * 0.06), fh, fh * (0.94 + zuf() * 0.08));
       im.setColorAt(i, felsFarbe);
       if (gr > 1.6) versteckplaetze.push({
@@ -174,11 +205,11 @@ function buesche(gruppe, zuf, menge) {
     pos.setXYZ(i, x * f, y * f * 0.85, z * f);
   }
   geo.computeVertexNormals();
-  const mats = [0x4a6b36, 0x587c3e, 0x6b7138].map(c =>
+  const mats = [0xa8cc86, 0xbad694, 0xc2c47e].map(c =>
     windMachen(new THREE.MeshStandardMaterial(Object.assign({
       color: c, roughness: 0.95, flatShading: false,
-      normalScale: new THREE.Vector2(1.6, 1.6)
-    }, stein(3.5))), 0.03, 1.2));
+      normalScale: new THREE.Vector2(1.1, 1.1)
+    }, laub(2.2))), 0.03, 1.2));
   const listen = [[], [], []];
   plaetze.forEach(pl => listen[Math.floor(zuf() * 3) % 3].push(pl));
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
@@ -385,6 +416,7 @@ export function erzeugeNatur(sparsam = false) {
   hindernisse.length = 0;
   schattenFlecken.length = 0;
   brocken.length = 0;
+  sperren.length = 0;
   fichten(gruppe, zuf, sparsam ? 110 : 170);
   felsen(gruppe, zuf, sparsam ? 170 : 260);
   buesche(gruppe, zuf, sparsam ? 130 : 200);

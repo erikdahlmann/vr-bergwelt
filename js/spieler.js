@@ -6,6 +6,11 @@ import { hindernisse, brocken } from './natur.js';
 const AUGENHOEHE = 1.35;      // Grundschulkind
 const SPRUNG_MAX = 30;        // Meter pro Teleport
 
+/* Wie hoch steht man hier? Im Fluss watet man höchstens bis zur Hüfte. */
+export function standHoehe(x, z) {
+  return Math.max(hoeheBei(x, z), wasserY(z) - 0.55);
+}
+
 /* Steht dieser Punkt in einem Felsbrocken? Dann würde man im Stein stehen. */
 function imFels(x, z) {
   for (const b of brocken) {
@@ -47,7 +52,7 @@ export class Spieler {
   }
 
   setzeAuf(x, z) {
-    this.rig.position.set(x, hoeheBei(x, z), z);
+    this.rig.position.set(x, standHoehe(x, z), z);
   }
 
   /* ---------- Zielring und Strahl ---------- */
@@ -236,10 +241,10 @@ export class Spieler {
         if (d > SPRUNG_MAX) {
           const f = SPRUNG_MAX / d;
           p.set(hier.x + dx * f, 0, hier.z + dz * f);
-          p.y = hoeheBei(p.x, p.z);
         }
-        const nassIm = p.y < wasserY(p.z) - 0.1;
-        this.zielGueltig = imAreal(p.x, p.z) && !nassIm && !imFels(p.x, p.z);
+        p.y = standHoehe(p.x, p.z);
+        // Ins Wasser darf man – nur nicht in einen Felsen und nicht aus dem Areal
+        this.zielGueltig = imAreal(p.x, p.z) && !imFels(p.x, p.z);
         this.zielPunkt.copy(p);
         this.marker.visible = true;
         this.marker.position.copy(p);
@@ -302,12 +307,12 @@ export class Spieler {
         const dx = (vx * c - vz * s) * tempo;
         const dz = (vx * s + vz * c) * tempo;
         const nx = this.rig.position.x + dx, nz = this.rig.position.z + dz;
-        if (imAreal(nx, nz)) this.rig.position.set(nx, hoeheBei(nx, nz), nz);
+        if (imAreal(nx, nz) && !imFels(nx, nz)) this.rig.position.set(nx, standHoehe(nx, nz), nz);
       }
     } else {
       // VR: Höhe dem Boden anpassen, Drehen mit dem Stick
       const p = this.rig.position;
-      p.y += (hoeheBei(p.x, p.z) - p.y) * Math.min(1, dt * 8);
+      p.y += (standHoehe(p.x, p.z) - p.y) * Math.min(1, dt * 8);
       this.stickDrehen(dt);
     }
     this.aktualisiereZeiger();

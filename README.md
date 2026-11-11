@@ -54,6 +54,11 @@ Jede Art hat drei Abstände (in `js/daten.js`):
 * `radiusVerstecken` – es sucht ein Versteck (Loch, Fels, Busch) und verschwindet
   dort. Nach 12 bis 28 s kommt es an einer anderen Stelle wieder heraus.
 
+Tiere laufen nicht mehr durch Felsen, Baumstämme oder tiefes Wasser: jeder
+Stamm und jeder größere Fels hat einen Sperrkreis. Stößt ein Tier dagegen,
+rutscht es daran entlang oder sucht sich ein neues Ziel. Der Salamander darf
+nur knöcheltief ins Wasser, die anderen bis 22 cm.
+
 Besonderheiten: Gämsen und Alpendohlen warnen ihre Gruppe. Der Schneehase
 drückt sich erst flach auf den Boden und rennt erst spät los. Das Murmeltier
 setzt sich auf die Hinterbeine, wenn es Wache hält. Der Steinadler kreist und
@@ -95,6 +100,11 @@ keine Bilddateien:
   aufgeklebt wirkt.
 * Felsen haben viele Flächen, Schichtbänder und eine Steinkörnung. In einen
   Felsen hinein kann man nicht springen.
+* Vier eigene Texturen, alle im Browser gezeichnet: Wiese mit 4200 Halmen,
+  Fels mit Rissen und Schichten (Zellrauschen), Kies am Bach und Rinde. Der
+  Boden mischt Wiese, Fels, Kies und Schnee im Shader; wie viel wovon, steht
+  als Wert an jedem Geländepunkt.
+* Ins Wasser darf man. Im Fluss watet man bis zur Hüfte, der Kopf bleibt oben.
 
 ## Bewegung der Tiere
 

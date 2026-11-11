@@ -1,6 +1,7 @@
 // Gelände, Himmel, Fluss und Fernberge für das Bergszenario.
 import * as THREE from 'three';
-import { kornTextur, normalAus, wasserNormal, himmelTextur, textur } from './texturen.js';
+import { kornTextur, normalAus, wasserNormal, himmelTextur, textur,
+         wieseTextur, felsTextur, kiesTextur } from './texturen.js';
 
 export const AREAL = 200;            // Kantenlänge in Metern
 export const SPIELRADIUS = 94;       // begehbarer Radius
@@ -60,34 +61,24 @@ export function neigungBei(x, z) {
 }
 export function imAreal(x, z) { return Math.hypot(x, z) < SPIELRADIUS; }
 
-/* ---------- Farben ---------- */
-const cGras = new THREE.Color(0x5d7f3a);
-const cGrasDunkel = new THREE.Color(0x40592a);
-const cAlmgras = new THREE.Color(0x7c9448);
-const cFels = new THREE.Color(0x7d7a74);
-const cFelsDunkel = new THREE.Color(0x5b5853);
-const cSchotter = new THREE.Color(0x9a958c);
-const cSchnee = new THREE.Color(0xf2f4f7);
-const cKies = new THREE.Color(0xa39a8b);
-
-function bodenFarbe(x, z, h, neig, ziel) {
+/* ---------- Tönung und Anteile je Punkt ----------
+   Die Farbe kommt jetzt aus den Texturen. Die Vertexfarbe tönt nur noch. */
+function bodenTon(x, z, h, neig, ziel) {
   const n = fbm(x * 0.09 + 71, z * 0.09 + 13, 3);
   const fein = (fbm(x * 0.9 + 5, z * 0.9 + 29, 2) - 0.5);
-  const d = flussAbstand(x, z);
-  ziel.copy(cGras).lerp(cGrasDunkel, n);
-  ziel.lerp(cAlmgras, glatt(0.3, 0.75, n) * 0.5);
-  // Fels an steilen Hängen
-  const felsAnteil = glatt(0.42, 0.85, neig);
-  const fels = cFels.clone().lerp(cFelsDunkel, n);
-  ziel.lerp(fels, felsAnteil);
-  // Schotter und Schnee oben
-  ziel.lerp(cSchotter, glatt(15, 23, h) * 0.8);
-  ziel.lerp(cSchnee, glatt(24, 30, h + n * 2.5));
-  // Kiesband am Fluss
-  ziel.lerp(cKies, (1 - glatt(2.5, 8.5, d)) * 0.85);
-  // feine Körnung, damit nichts wie Plastik wirkt
-  ziel.offsetHSL(fein * 0.02, fein * 0.06, fein * 0.11);
+  // trockenere und saftigere Stellen
+  const r = 0.92 + n * 0.22 + fein * 0.12;
+  const gr = 0.94 + n * 0.16 + fein * 0.1;
+  const b = 0.88 + n * 0.18 + fein * 0.12;
+  ziel.setRGB(r, gr, b);
   return ziel;
+}
+export function anteile(x, z, h, neig) {
+  const d = flussAbstand(x, z);
+  const fels = Math.min(1, glatt(0.42, 0.9, neig) + glatt(13, 20, h) * 0.85);
+  const kies = (1 - glatt(2.0, 8.0, d)) * 0.95;
+  const schnee = glatt(23, 29, h + (fbm(x * 0.07 + 3, z * 0.07 + 8, 2) - 0.5) * 4);
+  return { fels: Math.min(1, fels) * (1 - kies), kies, schnee };
 }
 
 /* ---------- Geländenetz ---------- */
@@ -97,12 +88,18 @@ export function erzeugeGelaende() {
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
   const farben = new Float32Array(pos.count * 3);
+  const aFels = new Float32Array(pos.count);
+  const aKies = new Float32Array(pos.count);
+  const aSchnee = new Float32Array(pos.count);
   const c = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i);
     const h = hoeheBei(x, z);
     pos.setY(i, h);
-    bodenFarbe(x, z, h, neigungBei(x, z), c);
+    const neig = neigungBei(x, z);
+    const an = anteile(x, z, h, neig);
+    aFels[i] = an.fels; aKies[i] = an.kies; aSchnee[i] = an.schnee;
+    bodenTon(x, z, h, neig, c);
     // Mulden und Rinnen leicht abdunkeln (wirkt wie Schattenlicht)
     const r1 = 1.6, r2 = 4.5;
     const umgebung = (
@@ -115,15 +112,42 @@ export function erzeugeGelaende() {
     farben[i * 3] = c.r * licht; farben[i * 3 + 1] = c.g * licht; farben[i * 3 + 2] = c.b * licht;
   }
   geo.setAttribute('color', new THREE.BufferAttribute(farben, 3));
+  geo.setAttribute('aFels', new THREE.BufferAttribute(aFels, 1));
+  geo.setAttribute('aKies', new THREE.BufferAttribute(aKies, 1));
+  geo.setAttribute('aSchnee', new THREE.BufferAttribute(aSchnee, 1));
   geo.computeVertexNormals();
-  const korn = kornTextur(256);
+
+  const wiese = textur(wieseTextur(512), 72, true);
+  const fels = textur(felsTextur(512), 95, true);
+  const kies = textur(kiesTextur(512), 95, true);
+  const felsHoehe = felsTextur(256);
   const mat = new THREE.MeshStandardMaterial({
     vertexColors: true, roughness: 0.96, metalness: 0,
-    map: textur(korn.farbe, 70),
-    normalMap: textur(normalAus(korn.hoehe, 3.2), 70),
-    normalScale: new THREE.Vector2(0.85, 0.85)
+    map: wiese,
+    normalMap: textur(normalAus(felsHoehe, 2.2), 95),
+    normalScale: new THREE.Vector2(0.6, 0.6)
   });
-  mat.map.colorSpace = THREE.NoColorSpace;
+  // Gras, Fels, Kies und Schnee werden im Shader gemischt
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uFels = { value: fels };
+    sh.uniforms.uKies = { value: kies };
+    sh.vertexShader = `attribute float aFels; attribute float aKies; attribute float aSchnee;
+varying float vFels; varying float vKies; varying float vSchnee;
+` + sh.vertexShader.replace('#include <begin_vertex>',
+      `#include <begin_vertex>
+       vFels = aFels; vKies = aKies; vSchnee = aSchnee;`);
+    sh.fragmentShader = `uniform sampler2D uFels; uniform sampler2D uKies;
+varying float vFels; varying float vKies; varying float vSchnee;
+` + sh.fragmentShader.replace('#include <map_fragment>',
+      `vec4 tGras = texture2D(map, vMapUv);
+       vec4 tFels = texture2D(uFels, vMapUv * 0.78);
+       vec4 tKies = texture2D(uKies, vMapUv * 1.15);
+       vec3 misch = mix(tGras.rgb, tFels.rgb, clamp(vFels, 0.0, 1.0));
+       misch = mix(misch, tKies.rgb, clamp(vKies, 0.0, 1.0));
+       misch = mix(misch, vec3(0.9, 0.93, 1.0) * (0.72 + 0.45 * tFels.r), clamp(vSchnee, 0.0, 1.0));
+       diffuseColor *= vec4(misch, 1.0);`);
+  };
+  mat.customProgramCacheKey = () => 'boden4';
   const netz = new THREE.Mesh(geo, mat);
   netz.receiveShadow = true;
   netz.name = 'gelaende';

@@ -192,3 +192,156 @@ export function fleckTextur(groesse = 128) {
   g.fillRect(0, 0, groesse, groesse);
   return lw;
 }
+
+/* ---------- Zellrauschen (für Risse und Kiesel), nahtlos ---------- */
+function zellen(groesse, anzahl, saat) {
+  let z = saat | 0;
+  const zuf = () => { z = (z * 1103515245 + 12345) & 0x7fffffff; return z / 0x7fffffff; };
+  const px = [], py = [], pf = [];
+  for (let i = 0; i < anzahl; i++) { px.push(zuf()); py.push(zuf()); pf.push(zuf()); }
+  const d1 = new Float32Array(groesse * groesse);
+  const d2 = new Float32Array(groesse * groesse);
+  const id = new Float32Array(groesse * groesse);
+  for (let y = 0; y < groesse; y++) {
+    for (let x = 0; x < groesse; x++) {
+      const ux = x / groesse, uy = y / groesse;
+      let a = 9, b = 9, best = 0;
+      for (let i = 0; i < anzahl; i++) {
+        let dx = Math.abs(ux - px[i]), dy = Math.abs(uy - py[i]);
+        if (dx > 0.5) dx = 1 - dx;        // über den Rand hinweg
+        if (dy > 0.5) dy = 1 - dy;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < a) { b = a; a = d; best = pf[i]; } else if (d < b) b = d;
+      }
+      const k = y * groesse + x;
+      d1[k] = a; d2[k] = b; id[k] = best;
+    }
+  }
+  return { d1, d2, id };
+}
+
+/* ---------- Wiese: viele kleine Halme ---------- */
+export function wieseTextur(groesse = 512) {
+  const lw = leinwand(groesse, groesse);
+  const g = lw.getContext('2d');
+  // Grundfarbe mit weichen Flecken
+  g.fillStyle = '#5f7a39';
+  g.fillRect(0, 0, groesse, groesse);
+  for (let i = 0; i < 90; i++) {
+    const u = (i * 97.3 % 360) / 360, v = (i * 211.7 % 360) / 360;
+    const r = groesse * (0.05 + 0.12 * Math.abs(Math.sin(i * 1.7)));
+    const hell = Math.sin(i * 2.3) > 0 ? 'rgba(130,152,70,0.5)' : 'rgba(62,86,42,0.45)';
+    for (const ox of [-groesse, 0, groesse]) for (const oy of [-groesse, 0, groesse]) {
+      const rg = g.createRadialGradient(u * groesse + ox, v * groesse + oy, 0, u * groesse + ox, v * groesse + oy, r);
+      rg.addColorStop(0, hell);
+      rg.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = rg;
+      g.beginPath(); g.arc(u * groesse + ox, v * groesse + oy, r, 0, 6.3); g.fill();
+    }
+  }
+  // Halme
+  let z = 12345;
+  const zuf = () => { z = (z * 1103515245 + 12345) & 0x7fffffff; return z / 0x7fffffff; };
+  g.lineCap = 'round';
+  for (let i = 0; i < 4200; i++) {
+    const x = zuf() * groesse, y = zuf() * groesse;
+    const lang = groesse * (0.012 + zuf() * 0.03);
+    const w = zuf() * Math.PI * 2;
+    const t = zuf();
+    const h = 70 + t * 85, sat = 95 + t * 40;
+    g.strokeStyle = `rgb(${Math.round(h * 0.78)},${Math.round(sat)},${Math.round(45 + t * 35)})`;
+    g.lineWidth = groesse * (0.0018 + zuf() * 0.0022);
+    g.globalAlpha = 0.55 + zuf() * 0.45;
+    for (const ox of [-groesse, 0, groesse]) for (const oy of [-groesse, 0, groesse]) {
+      g.beginPath();
+      g.moveTo(x + ox, y + oy);
+      g.lineTo(x + ox + Math.cos(w) * lang, y + oy + Math.sin(w) * lang);
+      g.stroke();
+    }
+  }
+  g.globalAlpha = 1;
+  // ein paar winzige Blüten
+  for (let i = 0; i < 90; i++) {
+    const x = zuf() * groesse, y = zuf() * groesse;
+    g.fillStyle = ['#e8e2b0', '#dcd2e2', '#e8c6cc', '#f2f2ee'][Math.floor(zuf() * 4) % 4];
+    for (const ox of [-groesse, 0, groesse]) for (const oy of [-groesse, 0, groesse]) {
+      g.beginPath(); g.arc(x + ox, y + oy, groesse * 0.0035, 0, 6.3); g.fill();
+    }
+  }
+  return lw;
+}
+
+/* ---------- Fels: Risse und Schichten ---------- */
+export function felsTextur(groesse = 512) {
+  const lw = leinwand(groesse, groesse);
+  const g = lw.getContext('2d');
+  const bild = g.createImageData(groesse, groesse);
+  const z = zellen(groesse, 42, 7777);
+  const z2 = zellen(groesse, 150, 991);
+  for (let y = 0; y < groesse; y++) {
+    for (let x = 0; x < groesse; x++) {
+      const k = y * groesse + x;
+      const u = x / groesse * Math.PI * 2, v = y / groesse * Math.PI * 2;
+      const n = fbm(Math.cos(u) * 7 + 3, Math.sin(u) * 7 + Math.cos(v) * 7, 4);
+      const fein = fbm(Math.cos(u) * 26 + 11, Math.sin(v) * 26 + 5, 2);
+      // Risse zwischen den Zellen
+      const riss = 1 - Math.min(1, (z.d2[k] - z.d1[k]) / 0.012);
+      const riss2 = 1 - Math.min(1, (z2.d2[k] - z2.d1[k]) / 0.006);
+      // Schichtbänder
+      const band = 0.5 + 0.5 * Math.sin((y / groesse) * 26 + n * 4);
+      let w = 132 + (n - 0.5) * 60 + (fein - 0.5) * 30 + band * 14 + (z.id[k] - 0.5) * 22;
+      w -= riss * 42 + riss2 * 18;
+      w = Math.max(28, Math.min(242, w));
+      const i = k * 4;
+      bild.data[i] = w * 1.02; bild.data[i + 1] = w; bild.data[i + 2] = w * 0.96;
+      bild.data[i + 3] = 255;
+    }
+  }
+  g.putImageData(bild, 0, 0);
+  return lw;
+}
+
+/* ---------- Kies am Bach ---------- */
+export function kiesTextur(groesse = 512) {
+  const lw = leinwand(groesse, groesse);
+  const g = lw.getContext('2d');
+  const bild = g.createImageData(groesse, groesse);
+  const z = zellen(groesse, 190, 4242);
+  for (let y = 0; y < groesse; y++) {
+    for (let x = 0; x < groesse; x++) {
+      const k = y * groesse + x;
+      const rund = Math.max(0, 1 - z.d1[k] / 0.045);     // Wölbung des Kiesels
+      const fuge = 1 - Math.min(1, (z.d2[k] - z.d1[k]) / 0.01);
+      const ton = 150 + (z.id[k] - 0.5) * 72;
+      let w = ton + rund * 36 - fuge * 46;
+      w = Math.max(40, Math.min(240, w));
+      const i = k * 4;
+      bild.data[i] = w * 1.06; bild.data[i + 1] = w * 1.0; bild.data[i + 2] = w * 0.9;
+      bild.data[i + 3] = 255;
+    }
+  }
+  g.putImageData(bild, 0, 0);
+  return lw;
+}
+
+/* ---------- Rinde ---------- */
+export function rindeTextur(groesse = 256) {
+  const lw = leinwand(groesse, groesse);
+  const g = lw.getContext('2d');
+  const bild = g.createImageData(groesse, groesse);
+  for (let y = 0; y < groesse; y++) {
+    for (let x = 0; x < groesse; x++) {
+      const u = x / groesse * Math.PI * 2;
+      const laengs = fbm(Math.cos(u) * 9 + 2, y * 0.045 + 3, 3);
+      const fein = fbm(Math.cos(u) * 30 + 7, y * 0.3 + 1, 2);
+      const furche = Math.pow(Math.abs(Math.sin(laengs * 9)), 0.5);
+      let w = 120 + (laengs - 0.5) * 50 + (fein - 0.5) * 40 - furche * 42;
+      w = Math.max(30, Math.min(220, w));
+      const i = (y * groesse + x) * 4;
+      bild.data[i] = w * 1.12; bild.data[i + 1] = w * 0.95; bild.data[i + 2] = w * 0.8;
+      bild.data[i + 3] = 255;
+    }
+  }
+  g.putImageData(bild, 0, 0);
+  return lw;
+}

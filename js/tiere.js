@@ -1,7 +1,7 @@
 // Tiere: Platzierung, Verhalten (scheu!) und Bewegung.
 import * as THREE from 'three';
-import { hoeheBei, neigungBei, flussAbstand, imAreal, SPIELRADIUS } from './gelaende.js';
-import { versteckplaetze } from './natur.js';
+import { hoeheBei, neigungBei, flussAbstand, flussX, imAreal, wasserY, SPIELRADIUS } from './gelaende.js';
+import { versteckplaetze, sperren } from './natur.js';
 import { TIERARTEN } from './daten.js';
 import { BAUER } from './modelle.js';
 import { belebe } from './animation.js';
@@ -15,6 +15,17 @@ function zufallGeber(saat) {
 }
 const zuf = zufallGeber(770411);
 
+/* Ist dort Platz? Felsen und Stämme sperren, tiefes Wasser auch. */
+export function platzFrei(x, z, radius = 0.3, watTiefe = 0.22, flieger = false) {
+  for (const sp of sperren) {
+    const dx = x - sp.x, dz = z - sp.z;
+    const r = sp.r + radius;
+    if (dx * dx + dz * dz < r * r) return false;
+  }
+  if (!flieger && hoeheBei(x, z) < wasserY(z) - watTiefe) return false;
+  return true;
+}
+
 function passtLebensraum(art, x, z) {
   const h = hoeheBei(x, z), n = neigungBei(x, z), d = flussAbstand(x, z);
   switch (art) {
@@ -22,22 +33,42 @@ function passtLebensraum(art, x, z) {
     case 'hang': return h > 4 && h < 26;
     case 'wiese': return h > 1.5 && h < 15 && n < 0.38 && d > 8;
     case 'busch': return h > 1 && h < 20 && d > 4;
-    case 'bach': return d > 1.8 && d < 6.5 && h > -2;
+    case 'bach': return d > 4.2 && d < 11 && h > -3;
     case 'luft': return true;
     default: return true;
   }
 }
 
 function zufallsOrt(art, weitVon = null, minAbstand = 0) {
-  for (let i = 0; i < 400; i++) {
-    const w = zuf() * Math.PI * 2;
-    const r = Math.sqrt(zuf()) * (SPIELRADIUS - 6);
-    const x = Math.cos(w) * r, z = Math.sin(w) * r;
+  const watTiefe = art === 'bach' ? 0.05 : 0.22;
+  const flieger = art === 'luft';
+  let ersatz = null;
+  for (let i = 0; i < 500; i++) {
+    let x, z;
+    if (art === 'bach') {
+      // am Ufer entlang suchen, nicht im ganzen Tal
+      z = (zuf() * 2 - 1) * (SPIELRADIUS - 10);
+      x = flussX(z) + (zuf() < 0.5 ? -1 : 1) * (4.6 + zuf() * 5.5);
+      if (!imAreal(x, z)) continue;
+    } else {
+      const w = zuf() * Math.PI * 2;
+      const r = Math.sqrt(zuf()) * (SPIELRADIUS - 6);
+      x = Math.cos(w) * r; z = Math.sin(w) * r;
+    }
     if (!passtLebensraum(art, x, z)) continue;
+    if (!platzFrei(x, z, 0.4, watTiefe, flieger)) continue;
+    if (!ersatz) ersatz = new THREE.Vector3(x, hoeheBei(x, z), z);
     if (weitVon && Math.hypot(x - weitVon.x, z - weitVon.z) < minAbstand) continue;
     return new THREE.Vector3(x, hoeheBei(x, z), z);
   }
-  return new THREE.Vector3(0, hoeheBei(0, 0), 0);
+  // Rückfall: irgendein passender Platz, sonst die Talmitte am Ufer
+  if (ersatz) return ersatz;
+  for (let i = 0; i < 300; i++) {
+    const w = zuf() * Math.PI * 2, r = Math.sqrt(zuf()) * (SPIELRADIUS - 8);
+    const x = Math.cos(w) * r, z = Math.sin(w) * r;
+    if (platzFrei(x, z, 0.4, watTiefe, flieger)) return new THREE.Vector3(x, hoeheBei(x, z), z);
+  }
+  return new THREE.Vector3(14, hoeheBei(14, 14), 14);
 }
 
 function nahesVersteck(von, art, wegVon) {
@@ -96,6 +127,8 @@ export class Tier {
     this.kreisMitte = new THREE.Vector3(zuf() * 60 - 30, 0, zuf() * 60 - 30);
     this.tiefflug = 6 + zuf() * 8;
     this.wurzel.position.copy(this.pos);
+    this.koerperRadius = Math.max(0.12, this.modell.hitRadius * 0.32);
+    this.watTiefe = art.lebensraum === 'bach' ? 0.06 : 0.22;
   }
 
   neuesZiel(spieler) {
@@ -256,7 +289,20 @@ export class Tier {
       ? 1 : 1 / (1 + neig * 1.6);
     const schritt = Math.min(d, tempo * bremse * dt);
     let nx = this.pos.x + ux * schritt, nz = this.pos.z + uz * schritt;
-    if (!imAreal(nx, nz)) { nx = this.pos.x; nz = this.pos.z; }
+    const frei = (x, z) => imAreal(x, z) &&
+      (this.flieger || platzFrei(x, z, this.koerperRadius, this.watTiefe, false));
+    if (!frei(nx, nz)) {
+      // am Hindernis entlangrutschen: erst nur in x, dann nur in z
+      const nurX = this.pos.x + ux * schritt, nurZ = this.pos.z + uz * schritt;
+      if (frei(nurX, this.pos.z)) { nx = nurX; nz = this.pos.z; }
+      else if (frei(this.pos.x, nurZ)) { nx = this.pos.x; nz = nurZ; }
+      else {
+        // ganz blockiert: neues Ziel suchen
+        this.tempo = 0;
+        this.ausweichen = (this.ausweichen || 0) + 1;
+        return true;
+      }
+    }
     this.pos.set(nx, hoeheBei(nx, nz), nz);
     this.tempo = schritt / dt;
     const zielBlick = Math.atan2(-uz, ux);
