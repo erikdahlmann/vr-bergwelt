@@ -98,6 +98,10 @@ const start = document.getElementById('start');
 const losKnopf = document.getElementById('losknopf');
 losKnopf.disabled = false;
 losKnopf.textContent = 'Am Bildschirm starten';
+// ?sofort überspringt das Startfenster (für Bildschirmfotos und zum Vorführen)
+if (new URLSearchParams(location.search).has('sofort')) {
+  setTimeout(() => losKnopf.click(), 60);
+}
 losKnopf.addEventListener('click', () => {
   start.classList.add('weg');
   spieler.pause = false;
