@@ -29,10 +29,22 @@ html, body {
 #start.weg { opacity: 0; pointer-events: none; }
 .kasten {
   width: min(680px, 92vw);
+  max-height: 92vh;
+  overflow-y: auto;
   background: var(--papier);
   border-radius: 18px;
   padding: 30px 34px 26px;
   box-shadow: 0 24px 60px rgba(0,0,0,.5);
+}
+@media (max-width: 560px), (max-height: 560px) {
+  .kasten { padding: 18px 20px 16px; }
+  .kasten h1 { font-size: 24px; }
+  .auftrag { font-size: 16px; margin-bottom: 10px; }
+  .regeln { font-size: 14px; margin-bottom: 14px; }
+  button.gross { font-size: 16px; padding: 12px 14px; }
+  .feld { width: 56px; height: 56px; }
+  .feld .emoji { font-size: 20px; }
+  .feld .fname { font-size: 8px; }
 }
 .kasten h1 {
   margin: 0 0 10px; font-family: Georgia, serif; font-size: 34px; color: var(--berg);
