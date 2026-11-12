@@ -1,6 +1,6 @@
 # Bergwelt – Tiere finden in VR
 
-Live: https://erikdahlmann.github.io/vr-bergwelt/
+Live: https://dm-pkg.de/vr-bergwelt/
 
 WebGL-Lernspiel für die Grundschule. Die Kinder stehen in einem Bergtal von
 200 × 200 m und suchen 8 Tierarten. Wer ein Tier anklickt, bekommt seine
